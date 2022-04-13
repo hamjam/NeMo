@@ -55,15 +55,15 @@ To run this script with a .json manifest file, the manifest file should contain 
     "audio_data" - path to the audio file
     "text" - raw text
     "pred_text" - ASR model prediction
-    
+
     See https://github.com/NVIDIA/NeMo/blob/main/examples/asr/transcribe_speech.py on how to add ASR predictions
-        
+
     When the manifest is ready, run:
         python normalize_with_audio.py \
                --audio_data PATH/TO/MANIFEST.JSON \
-               --language en 
-     
-        
+               --language en
+
+
 To run with a single audio file, specify path to audio and text with:
     python normalize_with_audio.py \
            --audio_data PATH/TO/AUDIO.WAV \
@@ -71,18 +71,18 @@ To run with a single audio file, specify path to audio and text with:
            --text raw text OR PATH/TO/.TXT/FILE
            --model QuartzNet15x5Base-En \
            --verbose
-    
+
 To see possible normalization options for a text input without an audio file (could be used for debugging), run:
     python python normalize_with_audio.py --text "RAW TEXT"
-    
+
 Specify `--cache_dir` to generate .far grammars once and re-used them for faster inference
 """
 
 
 class NormalizerWithAudio(Normalizer):
     """
-    Normalizer class that converts text from written to spoken form. 
-    Useful for TTS preprocessing. 
+    Normalizer class that converts text from written to spoken form.
+    Useful for TTS preprocessing.
 
     Args:
         input_case: expected input capitalization
@@ -99,6 +99,7 @@ class NormalizerWithAudio(Normalizer):
         cache_dir: str = None,
         overwrite_cache: bool = False,
         whitelist: str = None,
+        lm: bool = False,
     ):
 
         super().__init__(
@@ -108,7 +109,9 @@ class NormalizerWithAudio(Normalizer):
             cache_dir=cache_dir,
             overwrite_cache=overwrite_cache,
             whitelist=whitelist,
+            lm=lm,
         )
+        self.lm = lm
 
     def normalize(self, text: str, n_tagged: int, punct_post_process: bool = True, verbose: bool = False,) -> str:
         """
@@ -124,10 +127,13 @@ class NormalizerWithAudio(Normalizer):
         Returns:
             normalized text options (usually there are multiple ways of normalizing a given semiotic class)
         """
-        original_text = text
 
-        if self.lang == "en":
-            text = pre_process(text)
+        assert (
+            len(text.split()) < 500
+        ), "Your input is too long. Please split up the input into sentences, or strings with fewer than 500 words"
+        original_text = text
+        text = pre_process(text)  # to handle []
+
         text = text.strip()
         if not text:
             if verbose:
@@ -135,22 +141,36 @@ class NormalizerWithAudio(Normalizer):
             return text
         text = pynini.escape(text)
 
-        if n_tagged == -1:
+        if self.lm:
+            if self.lang not in ["en"]:
+                raise ValueError(f"{self.lang} is not supported in LM mode")
+
             if self.lang == "en":
                 try:
-                    tagged_texts = rewrite.rewrites(text, self.tagger.fst_no_digits)
+                    lattice = rewrite.rewrite_lattice(text, self.tagger.fst_no_digits)
                 except pynini.lib.rewrite.Error:
+                    lattice = rewrite.rewrite_lattice(text, self.tagger.fst)
+                lattice = rewrite.lattice_to_nshortest(lattice, n_tagged)
+                tagged_texts = [(x[1], float(x[2])) for x in lattice.paths().items()]
+                tagged_texts.sort(key=lambda x: x[1])
+                tagged_texts, weights = list(zip(*tagged_texts))
+        else:
+            if n_tagged == -1:
+                if self.lang == "en":
+                    try:
+                        tagged_texts = rewrite.rewrites(text, self.tagger.fst_no_digits)
+                    except pynini.lib.rewrite.Error:
+                        tagged_texts = rewrite.rewrites(text, self.tagger.fst)
+                else:
                     tagged_texts = rewrite.rewrites(text, self.tagger.fst)
             else:
-                tagged_texts = rewrite.rewrites(text, self.tagger.fst)
-        else:
-            if self.lang == "en":
-                try:
-                    tagged_texts = rewrite.top_rewrites(text, self.tagger.fst_no_digits, nshortest=n_tagged)
-                except pynini.lib.rewrite.Error:
+                if self.lang == "en":
+                    try:
+                        tagged_texts = rewrite.top_rewrites(text, self.tagger.fst_no_digits, nshortest=n_tagged)
+                    except pynini.lib.rewrite.Error:
+                        tagged_texts = rewrite.top_rewrites(text, self.tagger.fst, nshortest=n_tagged)
+                else:
                     tagged_texts = rewrite.top_rewrites(text, self.tagger.fst, nshortest=n_tagged)
-            else:
-                tagged_texts = rewrite.top_rewrites(text, self.tagger.fst, nshortest=n_tagged)
 
         # non-deterministic Eng normalization uses tagger composed with verbalizer, no permutation in between
         if self.lang == "en":
@@ -170,6 +190,9 @@ class NormalizerWithAudio(Normalizer):
                 normalized_texts = [
                     post_process_punct(input=original_text, normalized_text=t) for t in normalized_texts
                 ]
+
+        if self.lm:
+            return normalized_texts, weights
 
         normalized_texts = set(normalized_texts)
         return normalized_texts
@@ -282,7 +305,7 @@ def parse_args():
         "--input_case", help="input capitalization", choices=["lower_cased", "cased"], default="cased", type=str
     )
     parser.add_argument(
-        "--language", help="Select target language", choices=["en", "ru", "de"], default="en", type=str
+        "--language", help="Select target language", choices=["en", "ru", "de", "es"], default="en", type=str
     )
     parser.add_argument("--audio_data", default=None, help="path to an audio file or .json manifest")
     parser.add_argument(
@@ -312,6 +335,9 @@ def parse_args():
         type=str,
     )
     parser.add_argument("--n_jobs", default=-2, type=int, help="The maximum number of concurrently running jobs")
+    parser.add_argument(
+        "--lm", action="store_true", help="Set to True for WFST+LM. Only available for English right now."
+    )
     parser.add_argument("--batch_size", default=200, type=int, help="Number of examples for each process")
     return parser.parse_args()
 
@@ -363,7 +389,7 @@ def normalize_manifest(
             for line in tqdm(batch)
         ]
 
-        with open(f"{dir_name}/{batch_idx}.json", "w") as f_out:
+        with open(f"{dir_name}/{batch_idx:05}.json", "w") as f_out:
             for line in normalized_lines:
                 f_out.write(json.dumps(line, ensure_ascii=False) + '\n')
 
@@ -411,6 +437,7 @@ if __name__ == "__main__":
             cache_dir=args.cache_dir,
             overwrite_cache=args.overwrite_cache,
             whitelist=args.whitelist,
+            lm=args.lm,
         )
 
         if os.path.exists(args.text):
