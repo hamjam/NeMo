@@ -113,43 +113,30 @@ class WERBPE(Metric):
         prediction_cpu_tensor = predictions.long().cpu()
         # iterate over batch
         for ind in range(prediction_cpu_tensor.shape[0]):
-<<<<<<< HEAD
-            prediction = prediction_cpu_tensor[ind].detach().numpy().tolist()
-            if predictions_len is not None:
-                prediction = prediction[: predictions_len[ind]]
-            # CTC decoding procedure
-            decoded_prediction = []
-            token_scores = []
-            previous = self.blank_id
-            if logits is not None:
-                for ind_pred, p in enumerate(prediction):
-                    if (p != previous or previous == self.blank_id) and p != self.blank_id:
-                        token_scores.append(float(logits[0, ind_pred, p]))
-                        decoded_prediction.append(p)
-                    previous = p
-            else:
-                 for ind_pred, p in enumerate(prediction):
-                    if (p != previous or previous == self.blank_id) and p != self.blank_id:
-                        decoded_prediction.append(p)
-                    previous = p
-=======
             if self.fold_consecutive:
                 prediction = prediction_cpu_tensor[ind].detach().numpy().tolist()
                 if predictions_len is not None:
                     prediction = prediction[: predictions_len[ind]]
                 # CTC decoding procedure
                 decoded_prediction = []
+                token_scores = []
                 previous = self.blank_id
-                for p in prediction:
-                    if (p != previous or previous == self.blank_id) and p != self.blank_id:
-                        decoded_prediction.append(p)
-                    previous = p
+                if logits is not None:
+                    for ind_pred, p in enumerate(prediction):
+                        if (p != previous or previous == self.blank_id) and p != self.blank_id:
+                            token_scores.append(float(logits[0, ind_pred, p]))
+                            decoded_prediction.append(p)
+                        previous = p
+                else:
+                    for ind_pred, p in enumerate(prediction):
+                        if (p != previous or previous == self.blank_id) and p != self.blank_id:
+                            decoded_prediction.append(p)
+                        previous = p
             else:
                 prediction = prediction_cpu_tensor[ind].detach()
                 if predictions_len is not None:
                     prediction = prediction[: predictions_len[ind]]
                 decoded_prediction = prediction[prediction != self.blank_id].tolist()
->>>>>>> 1a0575b3c255d1f4104ad1bac06abe4acb2c4c02
 
             text = self.decode_tokens_to_str(decoded_prediction)
 
