@@ -263,7 +263,6 @@ class AbstractRNNTDecoding(ABC):
             hypotheses_list = hypotheses_list[0]  # type: List[Hypothesis]
 
         prediction_list = hypotheses_list
-
         if isinstance(prediction_list[0], NBestHypotheses):
             hypotheses = []
             all_hypotheses = []
@@ -282,6 +281,7 @@ class AbstractRNNTDecoding(ABC):
             if return_hypotheses:
                 return hypotheses, None
             best_hyp_text = [h.text for h in hypotheses]
+
             return best_hyp_text, None
 
     def decode_hypothesis(self, hypotheses_list: List[Hypothesis]) -> List[Union[Hypothesis, NBestHypotheses]]:
@@ -305,10 +305,12 @@ class AbstractRNNTDecoding(ABC):
             # Simply remove any blank tokens
             prediction = [p for p in prediction if p != self.blank_id]
 
+            
+
             # De-tokenize the integer tokens
             hypothesis = self.decode_tokens_to_str(prediction)
-            hypotheses_list[ind].text = hypothesis
 
+            
             if self.compute_hypothesis_token_set:
                 hypotheses_list[ind].tokens = self.decode_ids_to_tokens(prediction)
         return hypotheses_list

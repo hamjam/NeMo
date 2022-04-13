@@ -283,7 +283,7 @@ class EncDecCTCModel(ASRModel, ExportableEncDecModel, ASRModuleMixin):
                             hypotheses.append(lg.cpu().numpy())
                     else:
                         current_hypotheses = self._wer.ctc_decoder_predictions_tensor(
-                            greedy_predictions, predictions_len=logits_len, return_hypotheses=return_hypotheses,
+                            greedy_predictions, predictions_len=logits_len, return_hypotheses=return_hypotheses, logits=logits
                         )
 
                         if return_hypotheses:

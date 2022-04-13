@@ -84,6 +84,7 @@ class Hypothesis:
     lm_scores: Optional[torch.Tensor] = None
     tokens: Optional[Union[List[int], torch.Tensor]] = None
     last_token: Optional[torch.Tensor] = None
+    token_scores: List[int] = None
 
 
 @dataclass

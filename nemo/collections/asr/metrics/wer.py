@@ -122,7 +122,7 @@ class WER(Metric):
         self.add_state("words", default=torch.tensor(0), dist_reduce_fx='sum', persistent=False)
 
     def ctc_decoder_predictions_tensor(
-        self, predictions: torch.Tensor, predictions_len: torch.Tensor = None, return_hypotheses: bool = False,
+        self, predictions: torch.Tensor, predictions_len: torch.Tensor = None, return_hypotheses: bool = False, logits: torch.Tensor = None
     ) -> List[str]:
         """
         Decodes a sequence of labels to words
@@ -159,7 +159,7 @@ class WER(Metric):
                 if (p != previous or previous == self.blank_id) and p != self.blank_id:
                     decoded_prediction.append(p)
                 previous = p
-
+                
             text = self.decode_tokens_to_str(decoded_prediction)
 
             if not return_hypotheses:

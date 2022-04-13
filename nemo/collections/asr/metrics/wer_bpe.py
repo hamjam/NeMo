@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from lib2to3.pgen2 import token
 from typing import List
 
 import editdistance
@@ -81,7 +82,7 @@ class WERBPE(Metric):
         self.add_state("words", default=torch.tensor(0), dist_reduce_fx='sum', persistent=False)
 
     def ctc_decoder_predictions_tensor(
-        self, predictions: torch.Tensor, predictions_len: torch.Tensor = None, return_hypotheses: bool = False
+        self, predictions: torch.Tensor, predictions_len: torch.Tensor = None, return_hypotheses: bool = False, logits: torch.Tensor = None
     ) -> List[str]:
         """
         Decodes a sequence of labels to words
@@ -114,24 +115,42 @@ class WERBPE(Metric):
                 prediction = prediction[: predictions_len[ind]]
             # CTC decoding procedure
             decoded_prediction = []
+            token_scores = []
             previous = self.blank_id
-            for p in prediction:
-                if (p != previous or previous == self.blank_id) and p != self.blank_id:
-                    decoded_prediction.append(p)
-                previous = p
+            if logits is not None:
+                for ind_pred, p in enumerate(prediction):
+                    if (p != previous or previous == self.blank_id) and p != self.blank_id:
+                        token_scores.append(float(logits[0, ind_pred, p]))
+                        decoded_prediction.append(p)
+                    previous = p
+            else:
+                 for ind_pred, p in enumerate(prediction):
+                    if (p != previous or previous == self.blank_id) and p != self.blank_id:
+                        decoded_prediction.append(p)
+                    previous = p
 
             text = self.decode_tokens_to_str(decoded_prediction)
 
             if not return_hypotheses:
                 hypothesis = text
             else:
-                hypothesis = Hypothesis(
-                    y_sequence=None,  # logprob info added by transcribe method
-                    score=-1.0,
-                    text=text,
-                    alignments=prediction,
-                    length=predictions_len[ind] if predictions_len is not None else 0,
-                )
+                if logits is not None:
+                    hypothesis = Hypothesis(
+                        y_sequence=decoded_prediction,  # logprob info added by transcribe method
+                        score=sum(token_scores),
+                        text=text,
+                        alignments=prediction,
+                        length=predictions_len[ind] if predictions_len is not None else 0,
+                        token_scores=token_scores
+                    )
+                else:
+                    hypothesis = Hypothesis(
+                        y_sequence=decoded_prediction,  # logprob info added by transcribe method
+                        score=-1.0,
+                        text=text,
+                        alignments=prediction,
+                        length=predictions_len[ind] if predictions_len is not None else 0,
+                    )
             hypotheses.append(hypothesis)
         return hypotheses
 

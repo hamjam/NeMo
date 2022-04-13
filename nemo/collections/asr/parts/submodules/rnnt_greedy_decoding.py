@@ -468,7 +468,7 @@ class GreedyBatchedRNNTInfer(_GreedyRNNTInfer):
             # Initialize list of Hypothesis
             batchsize = x.shape[0]
             hypotheses = [
-                rnnt_utils.Hypothesis(score=0.0, y_sequence=[], timestep=[], dec_state=None) for _ in range(batchsize)
+                rnnt_utils.Hypothesis(score=0.0, y_sequence=[], timestep=[], token_scores=[], dec_state=None) for _ in range(batchsize)
             ]
 
             # Initialize Hidden state matrix (shared by entire batch)
@@ -597,6 +597,7 @@ class GreedyBatchedRNNTInfer(_GreedyRNNTInfer):
                         # once they have occured (normally stopping condition of sample level loop).
                         for kidx, ki in enumerate(k):
                             if blank_mask[kidx] == 0:
+                                hypotheses[kidx].token_scores.append(v[kidx])
                                 hypotheses[kidx].y_sequence.append(ki)
                                 hypotheses[kidx].timestep.append(time_idx)
                                 hypotheses[kidx].score += float(v[kidx])
